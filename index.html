@@ -5,6 +5,44 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+  // Link Web App chính thức của Trung tâm dịch vụ việc làm Quảng Trị đã kết nối Google Sheet
+  const GOOGLE_DATABASE_URL = 'https://script.google.com/macros/s/AKfycbxco6Y4G8TRi3GVpxhNCQst_fipOiKc5MBZHcXmaexo6WbcZ4z3vYEf5ttsm1TluwSi/exec';
+  function dongBoLenGoogleSheets(fullBackupData) {
+      if (!GOOGLE_DATABASE_URL) return;
+      fetch(GOOGLE_DATABASE_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(fullBackupData)
+      })
+      .then(() => {
+          console.log('Dữ liệu đã tự động đồng bộ lên kho lưu trữ Google Sheets.');
+      })
+      .catch(err => {
+          console.error('Lỗi đồng bộ dữ liệu:', err);
+      });
+  }
+
+  // Hàm tự động gom dữ liệu hiện tại từ trình duyệt gửi đi khi bấm Lưu/Sao lưu
+  async function kichHoatDongBoToanCuc() {
+      try {
+          const o = { ver: 1, ts: Date.now() };
+          o['entries'] = await S.all('entries');
+          o['settings'] = await S.all('settings');
+          o['users'] = await S.all('users');
+          o['reports'] = await S.all('reports');
+          dongBoLenGoogleSheets(o);
+      } catch (e) {
+          console.error('Lỗi đóng gói dữ liệu đồng bộ:', e);
+      }
+  }
+</script>
+
+
+
 <style>:root{--navy:#0a2463;--navy2:#0f3a9a;--blue:#1d4ed8;--blue2:#3b6fe0;--light:#93b0ec;--pale:#e8efff;--bg:#f4f7fd;--card:#fff;--ink:#0f1f3d;--mut:#5b6b88;--line:#dbe4f3;--ok:#0f7b4f;--warn:#b45309;--bad:#b42318;box-sizing:border-box}
 *{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",system-ui,Arial,sans-serif}
 button,input,select,textarea{font:inherit;color:inherit}
