@@ -1,0 +1,12 @@
+[build]
+command = "node scripts/prepare-site.mjs"
+publish = "public"
+
+[build.environment]
+NODE_VERSION = "24"
+
+[functions]
+directory = "netlify/functions"
+
+[server]
+path = "/api/*"
