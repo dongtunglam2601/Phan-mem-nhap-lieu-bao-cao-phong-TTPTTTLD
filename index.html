@@ -5,41 +5,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script>
-  // Link Web App chính thức của Trung tâm dịch vụ việc làm Quảng Trị đã kết nối Google Sheet
-  const GOOGLE_DATABASE_URL = 'https://script.google.com/macros/s/AKfycbxco6Y4G8TRi3GVpxhNCQst_fipOiKc5MBZHcXmaexo6WbcZ4z3vYEf5ttsm1TluwSi/exec';
-  function dongBoLenGoogleSheets(fullBackupData) {
-      if (!GOOGLE_DATABASE_URL) return;
-      fetch(GOOGLE_DATABASE_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: {
-              'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(fullBackupData)
-      })
-      .then(() => {
-          console.log('Dữ liệu đã tự động đồng bộ lên kho lưu trữ Google Sheets.');
-      })
-      .catch(err => {
-          console.error('Lỗi đồng bộ dữ liệu:', err);
-      });
-  }
-
-  // Hàm tự động gom dữ liệu hiện tại từ trình duyệt gửi đi khi bấm Lưu/Sao lưu
-  async function kichHoatDongBoToanCuc() {
-      try {
-          const o = { ver: 1, ts: Date.now() };
-          o['entries'] = await S.all('entries');
-          o['settings'] = await S.all('settings');
-          o['users'] = await S.all('users');
-          o['reports'] = await S.all('reports');
-          dongBoLenGoogleSheets(o);
-      } catch (e) {
-          console.error('Lỗi đóng gói dữ liệu đồng bộ:', e);
-      }
-  }
-</script>
+<script type="module" src="/backup.js"></script>
 
 
 
@@ -391,6 +357,11 @@ const S={
  async set(c,id,v){if(this.g)return gs('dbSet',c,id,JSON.stringify(v));if(DB)return DB.collection(c).doc(id).set(v);const o=this.loc(c);o[id]=v;this.sv(c,o)},
  async del(c,id){if(this.g)return gs('dbDel',c,id);if(DB)return DB.collection(c).doc(id).delete();const o=this.loc(c);delete o[id];this.sv(c,o)},
  async setMany(c,items){if(this.g){for(let i=0;i<items.length;i+=200)await gs('dbSetMany',c,items.slice(i,i+200).map(([id,v])=>[id,JSON.stringify(v)]));return}for(const[id,v]of items)await this.set(c,id,v)}};
+// Capture local data for the durable backup mirror. Account credentials never leave this browser.
+window.backupCanUpload=()=>!!U&&can('a');
+window.collectBackupData=async()=>{const o={ver:1,ts:Date.now()};for(const c of ['entries','settings','users','reports']){o[c]=await S.all(c);if(c==='users')o[c]=o[c].map(({id,name,role,perm,act})=>({id,name,role,perm,act}))}return o};
+let backupBatch=0;
+for(const method of ['set','del','setMany']){const original=S[method];S[method]=async function(...args){backupBatch++;try{return await original.apply(this,args)}finally{backupBatch--;if(!backupBatch&&args[0]!=='audit')window.Backup?.changed()}}}
 if(GAS)setInterval(()=>{try{if(U&&document.visibilityState==='visible'&&!/INPUT|TEXTAREA|SELECT/.test((document.activeElement||{}).tagName||''))refresh().catch(()=>0)}catch(e){}},120000);
 async function logA(act,detail){try{await S.set('audit',Date.now()+'_'+Math.random().toString(36).slice(2,6),{u:U?U.id:'',n:U?U.name:'',act,detail:detail||'',ts:Date.now()})}catch(e){}}
 async function refresh(){
@@ -444,7 +415,7 @@ function shell(){
  <label>Cơ sở theo dõi</label><select id="sSite" onchange="SITE=this.value;go(page)">${Object.entries(SN).map(([k,v])=>`<option value="${k}" ${k===SITE?'selected':''}>${v}</option>`).join('')}</select>
  <nav>${NAV.map(([gname,l])=>{const it=l.filter(z=>allowed(z[0]));return it.length?`<h6>${gname}</h6>`+it.map(z=>`<a id="n_${z[0]}" onclick="go('${z[0]}')">${z[1]}</a>`).join(''):''}).join('')}</nav>
  <button class="btn sec out" onclick="logout()">Đăng xuất</button></aside>
- <section><div class="top"><div class="crumb" id="crumb"></div><div class="sp"></div><div id="topr" class="row" style="align-items:center"></div></div><main id="main"></main></section></div><div id="tip" class="tip"></div>`;
+ <section><p id="backup-banner" role="status" style="margin:0;padding:8px 18px;background:var(--pale);color:var(--navy)">Sao lưu: mở Dữ liệu đã nhập để kết nối kho sao lưu định kỳ.</p><div class="top"><div class="crumb" id="crumb"></div><div class="sp"></div><div id="topr" class="row" style="align-items:center"></div></div><main id="main"></main></section></div><div id="tip" class="tip"></div>`;
  document.addEventListener('mouseover',tipOn);document.addEventListener('mouseout',e=>{if(e.target.dataset&&e.target.dataset.tip)$('tip').style.display='none'});
  go(allowed(page)?page:'tq')}
 function tipOn(e){const t=e.target;if(t.dataset&&t.dataset.tip){const b=$('tip');b.textContent=t.dataset.tip;b.style.display='block';const r=t.getBoundingClientRect();b.style.left=Math.min(innerWidth-290,Math.max(4,r.left+r.width/2-60))+'px';b.style.top=Math.max(4,r.top-34)+'px'}}
@@ -647,7 +618,7 @@ function vDL(){
  <div><label class="f">Loại</label><select onchange="dlF.t=this.value;vDL()"><option value="">Tất cả</option><option value="tt" ${dlF.t==='tt'?'selected':''}>Thực tế</option><option value="kh" ${dlF.t==='kh'?'selected':''}>Kế hoạch</option><option value="cv" ${dlF.t==='cv'?'selected':''}>Báo cáo Cục</option></select></div></div></div>
  <div class="card"><div class="row"><button class="btn n" onclick="expAll()">Xuất toàn bộ dữ liệu (Excel)</button><button class="btn sec n" onclick="expTpl()">Tải mẫu nhập Excel</button><div class="n"><label class="f" style="margin:0">Nhập từ Excel (.xlsx/.csv) theo mẫu</label><input type="file" accept=".xlsx,.xls,.csv" onchange="impXl(this.files[0])"></div></div><div class="msg" id="xm"></div>
  ${can('a')?`<div class="row" style="margin:8px 0"><button class="btn n" onclick="bkExport()">Sao lưu toàn bộ dữ liệu (.json)</button><div class="n"><label class="f" style="margin:0">Khôi phục từ tệp sao lưu (.json)</label><input type="file" accept=".json" onchange="bkImport(this.files[0])"></div></div>`:''}<p class="mut">Mẫu gồm các cột: Ngày (dd/mm/yyyy hoặc yyyy-mm-dd), Cơ sở (CS1/CS2), Loại (TT = thực tế, KH = kế hoạch) và mã các chỉ tiêu ở hàng tiêu đề (ví dụ ph_dk, a3, a5…). Bản ghi trùng ngày/cơ sở/loại được cập nhật các cột có giá trị.</p></div>
- <div class="card"><div class="wrap"><table><tr><th>Ngày</th><th>Cơ sở</th><th>Loại</th><th>Số chỉ tiêu</th><th>Người nhập</th><th></th></tr>${l.slice(0,300).map(e=>`<tr><td>${dv(e.date)}</td><td>${e.site}</td><td>${e.t==='tt'?'Thực tế':e.t==='cv'?'Báo cáo Cục':'Kế hoạch'}</td><td class="n">${Object.keys(e.v||{}).length}</td><td>${esc(e.by||'')}</td><td>${canSite(e.site)?`<button class="btn sec sm" onclick="nlOpen('${e.id}')">Mở / sửa</button> `:''}${can('a')?`<button class="btn dg sm" onclick="delNL('${e.id}')">Xóa</button>`:''}</td></tr>`).join('')||'<tr><td colspan="6" class="mut">Không có bản ghi.</td></tr>'}</table></div>${l.length>300?`<p class="mut">Hiển thị 300/${l.length} bản ghi mới nhất, hãy thu hẹp bộ lọc.</p>`:''}</div>`}
+ ${can('a')?'<div class="card" id="backup-panel"></div>':''} <div class="card"><div class="wrap"><table><tr><th>Ngày</th><th>Cơ sở</th><th>Loại</th><th>Số chỉ tiêu</th><th>Người nhập</th><th></th></tr>${l.slice(0,300).map(e=>`<tr><td>${dv(e.date)}</td><td>${e.site}</td><td>${e.t==='tt'?'Thực tế':e.t==='cv'?'Báo cáo Cục':'Kế hoạch'}</td><td class="n">${Object.keys(e.v||{}).length}</td><td>${esc(e.by||'')}</td><td>${canSite(e.site)?`<button class="btn sec sm" onclick="nlOpen('${e.id}')">Mở / sửa</button> `:''}${can('a')?`<button class="btn dg sm" onclick="delNL('${e.id}')">Xóa</button>`:''}</td></tr>`).join('')||'<tr><td colspan="6" class="mut">Không có bản ghi.</td></tr>'}</table></div>${l.length>300?`<p class="mut">Hiển thị 300/${l.length} bản ghi mới nhất, hãy thu hẹp bộ lọc.</p>`:''}</div>`;window.Backup?.mount()}
 async function delNL(id){if(!can('a'))return;const b=document.activeElement;if(b&&!b.dataset.sure){b.dataset.sure=1;b.textContent='Bấm lần nữa để xóa';return}await S.del('entries',id);E=E.filter(z=>z.id!==id);logA('Xóa bản ghi',id);vDL()}
 const codes=()=>['date','site','t',...KEYS];
 async function expTpl(){const w=XLSX.utils.aoa_to_sheet([['Ngày','Cơ sở','Loại',...KEYS.map(k=>k)],['Hàng 2: tên chỉ tiêu (bỏ qua khi nhập)','','',...KEYS.map(k=>LAB[k].l)],[dv(TODAY),'CS1','TT']]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,w,'Nhap_lieu');await saveFile('Mau_nhap_lieu.xlsx',new Blob([XLSX.write(wb,{type:'array',bookType:'xlsx'})]))}
